@@ -1,0 +1,41 @@
+import asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.context import CryptContext
+
+async def wait_for_mongo(uri):
+    """Attend que MongoDB soit accessible."""
+    for i in range(10):
+        try:
+            client = AsyncIOMotorClient(uri)
+            await client.admin.command('ping')
+            print("✅ MongoDB prêt.")
+            return client
+        except Exception:
+            print("⏳ En attente de MongoDB...")
+            await asyncio.sleep(3)
+    raise RuntimeError("MongoDB non disponible après 30s.")
+
+async def create_superadmin():
+    client = await wait_for_mongo("mongodb://mongo:27017")
+    db = client["rh_eval"]
+
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    hashed = pwd_context.hash("terroubi")
+
+    user = {
+        "email": "superadmin@terroubi.com",
+        "nom": "Super",
+        "prenom": "Admin",
+        "password_hash": hashed,
+        "role": "GLOBAL_ADMIN",
+        "tenant_id": "terroubi",
+        "statut": "actif"
+    }
+
+    if await db.users.find_one({"email": user["email"]}) is None:
+        result = await db.users.insert_one(user)
+        print(f"✅ Super Admin créé avec ID: {result.inserted_id}")
+    else:
+        print("⚠️ Super Admin déjà existant.")
+
+asyncio.run(create_superadmin())
